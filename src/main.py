@@ -250,55 +250,59 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     ### add 명령어 정의
-    add_p = sub.add_parser("add", help="add new lot")
-
+    add_p = sub.add_parser("add", help="Add a new lot (buy)")
     # positional argument (필수인자, 반드시 순서를 지켜야 함)
-    add_p.add_argument("ticker")
-    add_p.add_argument("qty")
-    add_p.add_argument("price")
-    add_p.add_argument("stop")
+    add_p.add_argument("ticker", help="Stock ticker symbol (e.g., TSLA)")
+    add_p.add_argument("qty", help="Number of shares to buy (e.g., 100)")
+    add_p.add_argument("price", help="Entry price per share (e.g., 200.0)")
+    add_p.add_argument("stop", help="Initial stop loss price (e.g., 180.0)")
 
     # nargs = "?" : 필수인자지만 생략 가능 (디폴트 매개변수 같은거라 마지막 위치인자에만 사용 가능)
-    add_p.add_argument("note", nargs="?")
-
+    add_p.add_argument("note", nargs="?", help="Optional memo or trade note")
     # 선택인자 (--arg 사용 시에만 사용, 순서 상관 없고 생략 가능함)
-    add_p.add_argument("--date")
-    
+    add_p.add_argument("--date", help="Transaction date (YYYY-MM-DD). Defaults to today.")    
     # 실행함수 등록
     add_p.set_defaults(func=cmd_add)
 
 
     ### trim 명령어 등록
-    trim_p = sub.add_parser("trim", help="trim lot")
-    trim_p.add_argument("ticker")
-    trim_p.add_argument("qty")
-    trim_p.add_argument("--id", required=True, type=int) # 선택 인자도 required=True를 주면 사실상 필수로 만들 수 있음
-    trim_p.add_argument("--price", required=True)
-    trim_p.add_argument("note", nargs="?")
-    trim_p.add_argument("--date")
+    trim_p = sub.add_parser("trim", help="Sell part of a lot (partial exit)")
+
+    trim_p.add_argument("ticker", help="Stock ticker (e.g., TSLA)")
+    trim_p.add_argument("qty", help="Quantity to sell (e.g., 30)")
+    trim_p.add_argument("--id", required=True, type=int, help="Target lot ID to trim from")
+    trim_p.add_argument("--price", required=True, help="Sell price (e.g., 220.5)")
+    trim_p.add_argument("note", nargs="?", help="Optional note")
+    trim_p.add_argument("--date", help="Execution date (YYYY-MM-DD)")
     trim_p.set_defaults(func=cmd_trim)
 
+
     # close 명령어 등록
-    close_p = sub.add_parser("close", help="close lot")
-    close_p.add_argument("ticker")
-    close_p.add_argument("--id", required=True, type=int)
-    close_p.add_argument("--price", required=True)
-    close_p.add_argument("note", nargs="?")
-    close_p.add_argument("--date")
+    close_p = sub.add_parser("close", help="Close an entire lot (full exit)")
+
+    close_p.add_argument("ticker", help="Stock ticker (e.g., TSLA)")
+    close_p.add_argument("--id", required=True, type=int, help="Lot ID to close")
+    close_p.add_argument("--price", required=True, help="Sell price for closing (e.g., 240.0)")
+    close_p.add_argument("note", nargs="?", help="Optional note")
+    close_p.add_argument("--date", help="Execution date (YYYY-MM-DD)")
     close_p.set_defaults(func=cmd_close)
 
+
     # stop 명령어 등록
-    stop_p = sub.add_parser("stop", help="move stop")
-    stop_p.add_argument("ticker")
-    stop_p.add_argument("new_stop")
-    stop_p.add_argument("--id", required=True, type=int)
-    stop_p.add_argument("note", nargs="?")
-    stop_p.add_argument("--date")
+    stop_p = sub.add_parser("stop", help="Move stop loss for a specific lot")
+
+    stop_p.add_argument("ticker", help="Stock ticker (e.g., TSLA)")
+    stop_p.add_argument("new_stop", help="New stop loss price (e.g., 190.0)")
+    stop_p.add_argument("--id", required=True, type=int, help="Lot ID to update stop for")
+    stop_p.add_argument("note", nargs="?", help="Optional note")
+    stop_p.add_argument("--date", help="Execution date (YYYY-MM-DD)")
     stop_p.set_defaults(func=cmd_stop)
 
+
     # report 명령어 등록
-    rep_p = sub.add_parser("report", help="show report")
+    rep_p = sub.add_parser("report", help="Display portfolio summary and P/L report")
     rep_p.set_defaults(func=cmd_report)
+
 
     return p
 
