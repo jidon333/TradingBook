@@ -12,6 +12,8 @@ from decimal import Decimal, getcontext # 금융에서 주로 사용하는 고�
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+import sys
+
 # 고정 소수점 연산인 Decimal의 내부 계산 정밀도를 소수점 12자리까지 보장
 getcontext().prec = 12
 
@@ -67,7 +69,7 @@ def append_row(row: Dict[str, str]) -> None:
 def build_portfolio(rows: List[Dict[str, str]]) -> Tuple[Dict[str, Dict[int, Lot]], Dict[str, Decimal]]:
     """
     반환값 튜플)
-    positions: {ticker: {row_id: Lot}} 형태 — 보유 중인 포지션들
+    positions: {ticker: {row_id: Lot}} 형태 — 보유 중인 \n
     realized: {ticker: 수익} 형태 — 실현 수익금
     """
 
@@ -145,30 +147,54 @@ def cmd_add(args: argparse.Namespace) -> None:
 
 def cmd_trim(args: argparse.Namespace) -> None:
     rows = load_rows()
+    positions, _ = build_portfolio(rows)
+
+    ticker = args.ticker.upper()
+    lot = positions.get(ticker, {}).get(args.id)
+
+    # 1) ID 존재 검사
+    if not lot:
+        print(f"⚠️ Trim skipped: lot id={args.id} for {ticker} not found.")
+        return
+
+    sell_qty = Decimal(args.qty)
+    # 2) 과다 매도 방지
+    if sell_qty > lot.qty:
+        print(f"⚠️ Trim skipped: trying to sell {sell_qty}, but only {lot.qty} left.")
+        return
+
+    # 3) 정상 처리
     row_id = next_row_id(rows)
     date = args.date or datetime.date.today().isoformat()
     note = f"trim id={args.id}" + (f" {args.note}" if args.note else "")
     row = {
         "id": str(row_id),
         "date": date,
-        "ticker": args.ticker.upper(),
-        "qty": str(-Decimal(args.qty)),
+        "ticker": ticker,
+        "qty": str(-sell_qty),
         "price": str(Decimal(args.price)),
         "stop": "0",
         "note": note,
     }
     append_row(row)
-    print(f"Trimmed lot {args.id} by {args.qty}")
+    print(f"Trimmed lot {args.id} by {sell_qty}")
 
 
 def cmd_close(args: argparse.Namespace) -> None:
     rows = load_rows()
     positions, _ = build_portfolio(rows)
+
     ticker = args.ticker.upper()
     lot = positions.get(ticker, {}).get(args.id)
+
+
     if not lot:
-        print("Lot not found")
+        print(f"⚠️ Close skipped: lot id={args.id} for {ticker} not found.")
         return
+    if lot.qty == 0:
+        print(f"⚠️ Close skipped: lot id={args.id} for {ticker} already fully sold.")
+        return
+    
     # close는 특정 트랜치를 전량 청산하는 것을 의미하기 때문에 id가 일치하는 트랜치의 전체 수량을 cmd_trim 입력으로 넣어 코드를 재사용한다.
     qty = lot.qty
     args_trim = argparse.Namespace(
@@ -184,20 +210,29 @@ def cmd_close(args: argparse.Namespace) -> None:
 
 def cmd_stop(args: argparse.Namespace) -> None:
     rows = load_rows()
+    positions, _ = build_portfolio(rows)
+
+    ticker = args.ticker.upper()
+    lot = positions.get(ticker, {}).get(args.id)
+    
+    if not lot:
+        print(f"⚠️ Stop skipped: lot id={args.id} for {ticker} not found.")
+        return
+
     row_id = next_row_id(rows)
     date = args.date or datetime.date.today().isoformat()
     note = f"stop id={args.id}" + (f" {args.note}" if args.note else "")
     row = {
         "id": str(row_id),
         "date": date,
-        "ticker": args.ticker.upper(),
+        "ticker": ticker,
         "qty": "0",
         "price": "0",
         "stop": str(Decimal(args.new_stop)),
         "note": note,
     }
     append_row(row)
-    print(f"Moved stop for lot {args.id}")
+    print(f"Moved stop for lot {args.id} to {args.new_stop}")
 
 
 def cmd_report(_: argparse.Namespace) -> None:
@@ -257,8 +292,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_p.add_argument("price", help="Entry price per share (e.g., 200.0)")
     add_p.add_argument("stop", help="Initial stop loss price (e.g., 180.0)")
 
-    # nargs = "?" : 필수인자지만 생략 가능 (디폴트 매개변수 같은거라 마지막 위치인자에만 사용 가능)
-    add_p.add_argument("note", nargs="?", help="Optional memo or trade note")
+    add_p.add_argument("--note", help="Optional memo or trade note")
     # 선택인자 (--arg 사용 시에만 사용, 순서 상관 없고 생략 가능함)
     add_p.add_argument("--date", help="Transaction date (YYYY-MM-DD). Defaults to today.")    
     # 실행함수 등록
@@ -272,7 +306,7 @@ def build_parser() -> argparse.ArgumentParser:
     trim_p.add_argument("qty", help="Quantity to sell (e.g., 30)")
     trim_p.add_argument("--id", required=True, type=int, help="Target lot ID to trim from")
     trim_p.add_argument("--price", required=True, help="Sell price (e.g., 220.5)")
-    trim_p.add_argument("note", nargs="?", help="Optional note")
+    trim_p.add_argument("--note", help="Optional memo or trade note")
     trim_p.add_argument("--date", help="Execution date (YYYY-MM-DD)")
     trim_p.set_defaults(func=cmd_trim)
 
@@ -283,7 +317,7 @@ def build_parser() -> argparse.ArgumentParser:
     close_p.add_argument("ticker", help="Stock ticker (e.g., TSLA)")
     close_p.add_argument("--id", required=True, type=int, help="Lot ID to close")
     close_p.add_argument("--price", required=True, help="Sell price for closing (e.g., 240.0)")
-    close_p.add_argument("note", nargs="?", help="Optional note")
+    close_p.add_argument("--note", help="Optional memo or trade note")
     close_p.add_argument("--date", help="Execution date (YYYY-MM-DD)")
     close_p.set_defaults(func=cmd_close)
 
@@ -294,7 +328,7 @@ def build_parser() -> argparse.ArgumentParser:
     stop_p.add_argument("ticker", help="Stock ticker (e.g., TSLA)")
     stop_p.add_argument("new_stop", help="New stop loss price (e.g., 190.0)")
     stop_p.add_argument("--id", required=True, type=int, help="Lot ID to update stop for")
-    stop_p.add_argument("note", nargs="?", help="Optional note")
+    stop_p.add_argument("--note", help="Optional memo or trade note")
     stop_p.add_argument("--date", help="Execution date (YYYY-MM-DD)")
     stop_p.set_defaults(func=cmd_stop)
 
@@ -310,8 +344,6 @@ def build_parser() -> argparse.ArgumentParser:
 # argv: 명시적으로 인자 리스트를 넘길 수 있도록 파라미터로 받음
 # 기본값은 None. 이 경우 sys.argv를 자동 사용함
 def main(argv: List[str] | None = None) -> None:
-
-    print(argv)
 
     # CLI 파서 생성
     parser = build_parser() 
