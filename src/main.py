@@ -21,6 +21,36 @@ getcontext().prec = 12
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "trades.csv"
 HEADER = ["id", "date", "ticker", "qty", "price", "stop", "note"]
 
+def print_status(positions: Dict[str, Dict[int, Lot]]) -> None:
+    print("🟢 Open Lots\n")
+    for ticker in sorted(positions.keys()):
+        lots = positions[ticker]
+        for lot in lots.values():
+            print(
+                f"[{ticker:<5}] Lot ID={lot.id} | Qty={lot.qty} | "
+                f"In={lot.price:.2f} | Stop={lot.stop:.2f} | "
+                f"Risk=${lot.risk():.2f}"
+            )
+
+
+def print_report(positions: Dict[str, Dict[int, Lot]], realized: Dict[str, Decimal]) -> None:
+    print("\n📊 Portfolio Summary (by Ticker)\n")
+    print("Ticker | Shares | AvgIn | AvgStop | Risk$ | Realized P/L")
+    print("-" * 60)
+
+    for ticker, lots in positions.items():
+        qty = sum(l.qty for l in lots.values())
+        if qty == 0:
+            continue
+        avg_in = sum(l.qty * l.price for l in lots.values()) / qty
+        avg_stop = sum(l.qty * l.stop for l in lots.values()) / qty
+        risk = sum(l.risk() for l in lots.values())
+        pl = realized[ticker]
+        print(
+            f"{ticker:<6} | {qty} | {avg_in:.2f} | {avg_stop:.2f} | {risk:.2f} | {pl:.2f}"
+        )
+
+
 
 class Lot:
     def __init__(self, lot_id: int, ticker: str, qty: Decimal, price: Decimal, stop: Decimal):
@@ -232,33 +262,26 @@ def cmd_stop(args: argparse.Namespace) -> None:
         "note": note,
     }
     append_row(row)
-    print(f"Moved stop for lot {args.id} to {args.new_stop}")
+    print(f"Moved stop for lot {args.id} of {ticker}: {lot.stop} ➝ {args.new_stop}")
+    
+
+def cmd_status(_: argparse.Namespace) -> None:
+    rows = load_rows()
+    positions, _ = build_portfolio(rows)
+    print_status(positions)
 
 
 def cmd_report(_: argparse.Namespace) -> None:
     rows = load_rows()
     positions, realized = build_portfolio(rows)
+    print_report(positions, realized)
 
-    headers = ["Ticker", "Shares", "AvgIn", "AvgStop", "Risk$", "Realized P/L"]
 
-    print(" | ".join(headers))  # 문자열 리스트를 " | "로 합쳐서 표 형태의 헤더 출력
-    print("-" * 60) # "-" * 60"으로 구분선 출력
-
-    for ticker, lots in positions.items():
-        # 각 ticker(종목)별로 모든 Lot 객체를 조회
-        # 전체 수량이 0이면 (청산 완료된 포지션) → 출력 생략
-        qty = sum(l.qty for l in lots.values())
-        if qty == 0:
-            continue
-
-        avg_in = sum(l.qty * l.price for l in lots.values()) / qty
-        avg_stop = sum(l.qty * l.stop for l in lots.values()) / qty
-        risk = sum(l.risk() for l in lots.values())
-        pl = realized[ticker]
-        print(
-            f"{ticker} | {qty} | {avg_in:.2f} | {avg_stop:.2f} | {risk:.2f} | {pl:.2f}"
-        )
-
+def cmd_summary(_: argparse.Namespace) -> None:
+    rows = load_rows()
+    positions, realized = build_portfolio(rows)
+    print_status(positions)
+    print_report(positions, realized)
 
 # 이 함수는 argparse.ArgumentParser 객체를 생성해서 리턴함. 즉 CLI 파서 생성기
 def build_parser() -> argparse.ArgumentParser:
@@ -337,6 +360,14 @@ def build_parser() -> argparse.ArgumentParser:
     rep_p = sub.add_parser("report", help="Display portfolio summary and P/L report")
     rep_p.set_defaults(func=cmd_report)
 
+
+    # status 명령어 등록
+    stat_p = sub.add_parser("status", help="Display all currently open lots")
+    stat_p.set_defaults(func=cmd_status)
+
+    # summary 명령어 등록
+    sum_p = sub.add_parser("summary", help="Show both status and report")
+    sum_p.set_defaults(func=cmd_summary)
 
     return p
 
