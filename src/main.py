@@ -96,6 +96,20 @@ def append_row(row: Dict[str, str]) -> None:
         writer.writerow(row)
 
 
+def make_row(row_id: int, date: str, ticker: str, qty: Decimal,
+             price: Decimal, stop: Decimal, note: str) -> Dict[str, str]:
+    """공용 row 생성 헬퍼"""
+    return {
+        "id": str(row_id),
+        "date": date,
+        "ticker": ticker,
+        "qty": str(qty),
+        "price": str(price),
+        "stop": str(stop),
+        "note": note,
+    }
+
+
 def build_portfolio(rows: List[Dict[str, str]]) -> Tuple[Dict[str, Dict[int, Lot]], Dict[str, Decimal]]:
     """
     반환값 튜플)
@@ -263,6 +277,73 @@ def cmd_stop(args: argparse.Namespace) -> None:
     }
     append_row(row)
     print(f"Moved stop for lot {args.id} of {ticker}: {lot.stop} ➝ {args.new_stop}")
+
+
+def cmd_split(args: argparse.Namespace) -> None:
+    rows = load_rows()
+    positions, _ = build_portfolio(rows)
+
+    ticker = args.ticker.upper()
+    lot = positions.get(ticker, {}).get(args.id)
+
+    if not lot or lot.qty == 0:
+        print(f"⚠️ Split skipped: lot id={args.id} for {ticker} not found or closed.")
+        return
+
+    tokens = args.parts.split()
+    parts: List[Tuple[Decimal, Decimal]] = []
+    for tok in tokens:
+        try:
+            qty_s, stop_s = tok.split(":", 1)
+            parts.append((Decimal(qty_s), Decimal(stop_s)))
+        except Exception:
+            print(f"⚠️ Split skipped: invalid part '{tok}'.")
+            return
+
+    total_qty = sum(q for q, _ in parts)
+    if total_qty != lot.qty:
+        print(f"⚠️ Split skipped: parts sum {total_qty} ≠ lot qty {lot.qty}.")
+        return
+
+    stops = [s for _, s in parts]
+    if len(stops) != len(set(stops)):
+        print("⚠️ Split skipped: duplicate stop values.")
+        return
+
+    date = args.date or datetime.date.today().isoformat()
+    row_id = next_row_id(rows)
+    total_rows = len(parts) + 1
+    idx = 1
+
+    # A. trim
+    trim_qty = lot.qty - parts[0][0]
+    note = f"split from id={args.id} part {idx}/{total_rows}"
+    rows_to_append = [
+        make_row(row_id, date, ticker, -trim_qty, lot.price, Decimal("0"), note)
+    ]
+    row_id += 1
+    idx += 1
+
+    # B. stop move for original lot
+    note = f"split from id={args.id} part {idx}/{total_rows}"
+    rows_to_append.append(
+        make_row(row_id, date, ticker, Decimal("0"), Decimal("0"), parts[0][1], note)
+    )
+    row_id += 1
+    idx += 1
+
+    # C. add new lots
+    for qty, stop in parts[1:]:
+        note = f"split from id={args.id} part {idx}/{total_rows}"
+        rows_to_append.append(
+            make_row(row_id, date, ticker, qty, lot.price, stop, note)
+        )
+        row_id += 1
+        idx += 1
+
+    for r in rows_to_append:
+        append_row(r)
+    print(f"Split lot {args.id} of {ticker} into {len(parts)} parts")
     
 
 def cmd_status(_: argparse.Namespace) -> None:
@@ -295,6 +376,7 @@ def build_parser() -> argparse.ArgumentParser:
     tradingbook trim TSLA 30 --id 3 --price 220  # Sell 30 shares from lot id=3 at 220
     tradingbook close TSLA --id 3 --price 240    # Close entire position of lot id=3
     tradingbook stop TSLA 190 --id 3             # Move stop to 190 for lot id=3
+    tradingbook split TSLA --id 3 --parts "50:190 50:185"  # Split lot id=3 into parts
     tradingbook report                           # Show current positions and realized P/L
     """,
     formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -354,6 +436,19 @@ def build_parser() -> argparse.ArgumentParser:
     stop_p.add_argument("--note", help="Optional memo or trade note")
     stop_p.add_argument("--date", help="Execution date (YYYY-MM-DD)")
     stop_p.set_defaults(func=cmd_stop)
+
+    # split 명령어 등록
+    split_p = sub.add_parser("split", help="Split a lot into multiple lots")
+    split_p.add_argument("ticker", help="Stock ticker (e.g., TSLA)")
+    split_p.add_argument("--id", required=True, type=int, help="Lot ID to split")
+    split_p.add_argument(
+        "--parts",
+        required=True,
+        help="Parts as 'QTY:STOP' tokens separated by space",
+    )
+    split_p.add_argument("--note", help="Optional memo or trade note")
+    split_p.add_argument("--date", help="Execution date (YYYY-MM-DD)")
+    split_p.set_defaults(func=cmd_split)
 
 
     # report 명령어 등록
