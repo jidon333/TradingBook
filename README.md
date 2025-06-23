@@ -29,6 +29,7 @@ python src/main.py
 | `trim`   | `TICKER QTY`            | `--id LOT_ID`, `--price PRICE`, `NOTE`, `--date` | 특정 트랜치에서 일부 매도                |
 | `close`  | `TICKER`                | `--id LOT_ID`, `--price PRICE`, `NOTE`, `--date` | 특정 트랜치를 전량 매도 (내부적으로 trim 처리) |
 | `stop`   | `TICKER NEW_STOP`       | `--id LOT_ID`, `NOTE`, `--date`                  | 트랜치의 스탑가를 이동                  |
+| `split`  | `TICKER`                | `--id LOT_ID`, `--parts "QTY:STOP ..."`, `--date` | 기존 트랜치를 여러 개로 분할            |
 | `report` | 없음                      | 없음                                               | 현재 보유 포지션과 실현 손익 요약 출력        |
 
 > 📌 모든 수치(`qty`, `price`, `stop`)는 `Decimal`로 정밀하게 처리됩니다.
@@ -70,6 +71,22 @@ tb stop QQQ 435.0 --id 3 "trail-up"
 # 리포트 출력
 tb report
 ```
+
+---
+
+## ✂️ split — 포지션 분할
+
+여러 스탑으로 관리하려는 기존 트랜치를 `split` 명령으로 나눌 수 있다.
+`--parts` 옵션에 `수량:STOP` 토큰을 공백으로 나열하면 된다. 첫 토큰은
+남길 수량과 새 스탑을 의미하며 나머지는 새로 생성될 트랜치가 된다.
+
+```bash
+# lot id=3을 두 파트로 분할
+tb split QQQ --id 3 --parts "5:420 5:415"
+```
+
+분할 과정은 0원의 실현손익만 발생하므로 이후 `status` 나 `report`로
+포지션을 그대로 추적할 수 있다.
 
 ---
 
