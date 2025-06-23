@@ -23,14 +23,20 @@ python src/main.py
 
 ## 2. 지원 명령어
 
-| 명령어      | 위치 인자                   | 옵션 인자                                            | 설명                            |
-| -------- | ----------------------- | ------------------------------------------------ | ----------------------------- |
-| `add`    | `TICKER QTY PRICE STOP` | `NOTE`, `--date YYYY-MM-DD`                      | 새로운 매수 트랜치 추가                 |
-| `trim`   | `TICKER QTY`            | `--id LOT_ID`, `--price PRICE`, `NOTE`, `--date` | 특정 트랜치에서 일부 매도                |
-| `close`  | `TICKER`                | `--id LOT_ID`, `--price PRICE`, `NOTE`, `--date` | 특정 트랜치를 전량 매도 (내부적으로 trim 처리) |
-| `stop`   | `TICKER NEW_STOP`       | `--id LOT_ID`, `NOTE`, `--date`                  | 트랜치의 스탑가를 이동                  |
-| `split`  | `TICKER`                | `--id LOT_ID`, `--parts "QTY:STOP ..."`, `--date` | 기존 트랜치를 여러 개로 분할            |
-| `report` | 없음                      | 없음                                               | 현재 보유 포지션과 실현 손익 요약 출력        |
+| 명령어      | 위치 인자                   | 옵션 인자                                               | 설명                                     |
+| -------- | ----------------------- | ------------------------------------------------     | -------------------------------------- |
+| `add`    | `TICKER QTY PRICE STOP` | `NOTE`, `--date YYYY-MM-DD`                          | 새로운 트랜치(매수) 추가                        |
+| `trim`   | `TICKER QTY`            | `--id LOT_ID`, `--price PRICE`, `NOTE`, `--date`     | 특정 트랜치에서 일부 매도                           |
+| `close`  | `TICKER`                | `--id LOT_ID`, `--price PRICE`, `NOTE`, `--date`     | 특정 트랜치를 전량 매도 *(내부적으로 `trim` 호출)* |
+| `stop`   | `TICKER NEW_STOP`       | `--id LOT_ID`, `NOTE`, `--date`                      | 트랜치의 스탑가 이동                                |
+| `split`  | `TICKER`                | `--id LOT_ID`, `--parts "QTY:STOP ..."`, `--date`    | 기존 트랜치를 여러 개로 분할하여 서로 다른 스탑 지정           |
+| `report` | 없음                      | 없음                                               | **Ticker** 단위 요약 리포트 *(합산 뷰)*              |
+| `status` | 없음                      | 없음                                               | **Lot(ID)** 단위 상세 리포트 *(개별 트랜치 뷰)*       |
+| `summary`| 없음                      | 없음                                               | `status` + `report` 통합 출력                    |
+
+> 모든 명령은 **append-only** 방식으로 `data/trades.csv`에 행을 추가하며,  
+> 프로그램은 매 실행 시 CSV를 읽어 `build_portfolio()` 로 상태를 재구성합니다.
+
 
 > 📌 모든 수치(`qty`, `price`, `stop`)는 `Decimal`로 정밀하게 처리됩니다.
 > 각 명령어는 CSV에 **새로운 행을 추가**하며, 기존 데이터를 수정하거나 삭제하지 않습니다.
@@ -56,20 +62,26 @@ tb trim QQQ 5 --id 3 --price 445.5 "scalp"
 ## 4. 예시 세션
 
 ```bash
-# 매수
+# 1️⃣ 매수 ─ QQQ 10주 @ 430.25, 초기 스탑 418
 tb add QQQ 10 430.25 418 "setup A"
 
-# 트랜치 3번에서 5주만 매도
+# 2️⃣ 일부 매도 ─ lot id=3 에서 5주 매도 @ 445.50
 tb trim QQQ 5 --id 3 --price 445.50 "partial"
 
-# 트랜치 5번 전량 매도
-tb close QQQ --id 5 --price 450.0 "exit all"
+# 3️⃣ 분할 스탑 관리 ─ lot id=3 을 5주+5주 로 나누고 각기 다른 스탑 지정
+tb split QQQ --id 3 --parts "5:425 5:418"
 
-# 트랜치 3번 스탑가를 435.0으로 조정
+# 4️⃣ 스탑 이동 ─ ❶번(남은) 트랜치(id=3) 스탑을 435.0 으로 조정
 tb stop QQQ 435.0 --id 3 "trail-up"
 
-# 리포트 출력
-tb report
+# 5️⃣ 전량 매도 ─ lot id=5 완전 청산 @ 450.0
+tb close QQQ --id 5 --price 450.0 "exit all"
+
+# 6️⃣ 현재 트랜치 상세 확인
+tb status
+
+# 7️⃣ 전체 포트폴리오 요약 + 상세 한 번에 보기
+tb summary
 ```
 
 ---
