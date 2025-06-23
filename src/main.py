@@ -372,12 +372,14 @@ def build_parser() -> argparse.ArgumentParser:
     description="TradingBook: A CLI-based portfolio tracking tool for stock traders.",
     epilog="""\
     Examples:
-    tradingbook add TSLA 100 200 180             # Buy 100 shares of TSLA at 200 with stop at 180
-    tradingbook trim TSLA 30 --id 3 --price 220  # Sell 30 shares from lot id=3 at 220
-    tradingbook close TSLA --id 3 --price 240    # Close entire position of lot id=3
-    tradingbook stop TSLA 190 --id 3             # Move stop to 190 for lot id=3
-    tradingbook split TSLA --id 3 --parts "50:190 50:185"  # Split lot id=3 into parts
-    tradingbook report                           # Show current positions and realized P/L
+    tradingbook add TSLA 100 200 180                         # Buy 100 shares @200, stop 180
+    tradingbook trim TSLA 30 --id 3 --price 220              # Sell 30 shares from lot id=3 @220
+    tradingbook close TSLA --id 3 --price 240                # Close entire lot id=3 @240
+    tradingbook stop TSLA 190 --id 3                         # Move stop of lot id=3 to 190
+    tradingbook split TSLA --id 3 --parts "50:190 50:185"    # Split lot id=3 into two tranches
+    tradingbook status                                        # Show all open lots (ID-level view)
+    tradingbook report                                        # Show ticker-level portfolio summary
+    tradingbook summary                                       # status + report in one shot
     """,
     formatter_class=argparse.RawDescriptionHelpFormatter,
     )
